@@ -9,3 +9,5 @@ Essentials/libsean/libsean16.o
 Essentials/lib/build
 tmp
 SDK
+.idea
+include

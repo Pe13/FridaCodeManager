@@ -4,37 +4,47 @@
 # :3
 #
 
-SHELL := /var/jb/bin/bash
+export SDKROOT := sdk
 
-all: prepare libfcm-compile libdycall-compile libsean-compile #libcheck-compile
+export CC := clang
+export CF := -target arm64-apple-ios15 -arch arm64 -I$(ROOTDIR)/include
+
+export COBJ_DIR := tmp/out/c
+export MOBJ_DIR := tmp/out/m
+
+# fishy patch
+export uuid := uuid
+
+all: libfcm-compile libdycall-compile libsean-compile #libcheck-compile
 
 prepare:
-	@if [ -d lib/build ]; then \
-		rm -rf lib/build; \
-		mkdir lib/build; \
-	else \
-		mkdir lib/build; \
-	fi
+	@rm -rf lib/build
+	@mkdir -p lib/build
 
-libfcm-compile:
-	@$(MAKE) -C libfcm all
-	@cp libfcm/tmp/lib/libfcm.a lib/build/libfcm.a
-	@$(MAKE) -C libfcm clean
+%-compile: prepare
+	@$(MAKE) -C $* all || $(MAKE) -C $* clean
+	@cp $*/tmp/lib/$*.a lib/build/$*.a
+	@$(MAKE) -C $* clean
 
-libsean-compile:
-	@$(MAKE) -C libsean all
-	@cp libsean/tmp/lib/libsean.a lib/build/libsean.a
-	@$(MAKE) -C libsean clean
-
-libdycall-compile:
-	@$(MAKE) -C libdycall all
-	@cp libdycall/tmp/lib/libdycall.a lib/build/libdycall.a
-	@$(MAKE) -C libdycall clean
-
-libcheck-compile:
-	@$(MAKE) -C libcheck all
-	@cp libcheck/tmp/lib/libcheck.a lib/build/libcheck.a
-	@$(MAKE) -C libcheck clean
+#libfcm-compile: prepare
+#	@$(MAKE) -C libfcm all
+#	@cp libfcm/tmp/lib/libfcm.a lib/build/libfcm.a
+#	@$(MAKE) -C libfcm clean
+#
+#libsean-compile: prepare
+#	@$(MAKE) -C libsean all
+#	@cp libsean/tmp/lib/libsean.a lib/build/libsean.a
+#	@$(MAKE) -C libsean clean
+#
+#libdycall-compile: prepare
+#	@$(MAKE) -C libdycall all
+#	@cp libdycall/tmp/lib/libdycall.a lib/build/libdycall.a
+#	@$(MAKE) -C libdycall clean
+#
+#libcheck-compile: prepare
+#	@$(MAKE) -C libcheck all
+#	@cp libcheck/tmp/lib/libcheck.a lib/build/libcheck.a
+#	@$(MAKE) -C libcheck clean
 
 clean:
 	@rm -rf lib/build

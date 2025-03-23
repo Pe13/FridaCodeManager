@@ -1,10 +1,20 @@
 # Makefile
-SDK_PATH = SDK
-OUTPUT_DIR = Blueprint/FridaCodeManager.app
+export ROOTDIR = $(shell pwd)
+export SDK_PATH = $(ROOTDIR)/SDK
+export OUTPUT_DIR = $(ROOTDIR)/Blueprint/FridaCodeManager.app
 VERSION := 2.0
 BUILD_PATH := .package/
 SWIFT := $(shell find ./FCM/ -name '*.swift')
 
+ifeq ($(shell uname -s),Linux)
+# Relying on theos swift toolchain
+#export PATH = /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin
+#export PATH := $(THEOS)/toolchain/linux/host/bin:$(THEOS)/toolchain/linux/iphone/bin:$(PATH)
+TOOLCHAIN = /home/pi/repos/swift-toolchain-linux/packages/linux
+export PATH := $(TOOLCHAIN)/host/bin:$(TOOLCHAIN)/iphone/bin:$(PATH)
+SHELL := /bin/sh
+LINUX := 1
+else # ifneq ($(uname -s), Linux)
 # Finding SHELL
 ifeq ($(wildcard /bin/sh),)
 ifeq ($(wildcard /var/jb/bin/sh),)
@@ -14,6 +24,9 @@ SHELL := /var/jb/bin/sh
 else
 SHELL := /bin/sh
 endif
+endif
+
+export SHELL
 
 PLF := -LEssentials/lib/prebuild -LEssentials/lib/build -lzip -lsean #-lserver -lcheck
 
@@ -28,7 +41,7 @@ roothide: LF := -lroot -lfcm
 roothide: ARCH := iphoneos-arm64e
 roothide: JB_PATH := /
 roothide: TARGET := jailbreak
-roothide: greet compile_swift sign  package_fs clean done
+roothide: greet compile_swift sign package_fs clean done
 
 trollstore: LF := -lfcm
 trollstore: TARGET := trollstore
@@ -40,28 +53,63 @@ stock: TARGET := stock
 stock: greet compile_swift makechain_jailed ipa clean done
 
 # Functions
+
+ifeq ($(LINUX), 1)
+get_sdk:
+	# Rely on theos sdk
+	@if [ ! -d SDK ]; then \
+		cp -a $(THEOS)/sdks/iPhoneOS16.5.sdk SDK; \
+		cd SDK/System/Library; \
+		mv PrivateFrameworks/MobileContainerManager.framework Frameworks/MobileContainerManager.framework; \
+		cd $(ROOTDIR); \
+		mkdir -p incldue: \
+		mv SDK/usr/include/dispatch incldue; \
+	fi
+	@if [ ! -d $(OUTPUT_DIR)/include ]; then \
+		cd $(OUTPUT_DIR); \
+		git clone --depth=1 https://github.com/theos/headers; \
+		mv headers include; \
+		cp -a $(THEOS)/vendor/templates/ios/xpc_service/headers/xpc $(OUTPUT_DIR)/include; \
+	fi
+else
+get_sdk:
+	@if [ ! -d SDK ]; then \
+		mkdir -p tmp; \
+		cd tmp; \
+		unzip ../FCM/UI/TabBar/Settings/SDKHub/sdk/iOS15.6.zip; \
+		mv iPhoneOS15.6.sdk ../SDK; \
+		cd ../SDK; \
+		mv System/Library/PrivateFrameworks/MobileContainerManager.framework System/Library/Frameworks/MobileContainerManager.framework; \
+		rm -rf tmp; \
+	fi
+	@if [ ! -d $(OUTPUT_DIR)/include ]; then \
+		cd $(OUTPUT_DIR); \
+		git clone https://github.com/theos/headers; \
+		mv headers include; \
+	fi
+endif
+
 greet:
-	@if [ ! -d tmp ]; then if [ ! -d SDK ]; then mkdir tmp; cd tmp; unzip ../FCM/UI/TabBar/Settings/SDKHub/sdk/iOS15.6.zip; mv iPhoneOS15.6.sdk ../SDK; cd ..; mv SDK/System/Library/PrivateFrameworks/MobileContainerManager.framework SDK/System/Library/Frameworks/MobileContainerManager.framework; rm -rf tmp; fi; fi; if [ ! -d Blueprint/FridaCodeManager.app/include ]; then cd Blueprint/FridaCodeManager.app; git clone https://github.com/theos/headers; mv headers include; fi
 	@echo "\nIts meant to be compiled on jailbroken iOS devices in terminal, compiling it using macos can cause certain anomalies with UI, etc\n "
+	@#echo "PATH = $(PATH)"
 	@if [ ! -d "Product" ]; then mkdir Product; fi
 
-compile_swift:
+compile_swift: greet get_sdk
 	@echo "\033[32mcompiling Essentials\033[0m"
 	@$(MAKE) -C Essentials all
 	@echo "\033[32mcompiling FridaCodeManager\033[0m"
-	@output=$$(swiftc -wmo -warnings-as-errors -Xlinker -lswiftCore -Xcc -IEssentials/include -D$(TARGET) -sdk $(SDK_PATH) $(SWIFT) $(PLF) $(LF) -o "$(OUTPUT_DIR)/swifty" -parse-as-library -import-objc-header FCM/bridge.h -framework MobileContainerManager -target arm64-apple-ios15.0 2>&1); \
+	@output=$$(swiftc -wmo -warnings-as-errors -Xlinker -lswiftCore -Xcc -IEssentials/include -D$(TARGET) -sdk $(SDK_PATH) $(SWIFT) $(PLF) $(LF) -o "$(OUTPUT_DIR)/swifty" -parse-as-library -import-objc-header FCM/bridge.h -I$(OUTPUT_DIR)/include -framework MobileContainerManager -target arm64-apple-ios15.0 2>&1); \
 	if [ $$? -ne 0 ]; then \
 		echo "$$output" | grep -v "remark:"; \
 		exit 1; \
 	fi
 	@$(MAKE) -C Essentials clean
 
-#sign: linkfix
-sign:
+sign: compile_swift
 	@echo "\033[32msigning FridaCodeManager $(Version)\033[0m"
 	@ldid -S./FCM/debug.xml $(OUTPUT_DIR)/swifty
 
-package_fs:
+package_fs: sign
 	@echo "\033[32mpackaging FridaCodeManager\033[0m"
 	@find . -type f -name ".DS_Store" -delete
 	@-rm -rf $(BUILD_PATH)
@@ -97,9 +145,12 @@ ipa:
 #	@install_name_tool -add_rpath @loader_path $(OUTPUT_DIR)/swifty
 #	@install_name_tool -add_rpath @loader_path/toolchain/lib $(OUTPUT_DIR)/swifty
 
-clean:
+clean: package_fs
 	@rm -rf $(OUTPUT_DIR)/swifty $(OUTPUT_DIR)/*.dylib .package
 
-done:
+extreme-clean:
+	rm -rf SDK $(OUTPUT_DIR)/include
+
+done: clean
 	@echo "\033[32mall done! :)\033[0m"
 
