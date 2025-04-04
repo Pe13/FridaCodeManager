@@ -4,7 +4,7 @@
 FridaCodeManager was made to offer a easy way to code, compile and install iOS apps on jailbroken iPhones.
 
 ## Compatibility
-The app is fully supported on rootless and roothide jailbroken iOS and iPadOS from version 15.0 up to 18.2. It's also partially supported on [Trollstore](https://github.com/opa334/TrollStore) iDevices from version 15.0 up to 17.6.1. A version of FridaCodeManager supporting usual iDevices is in progress.
+The app is fully supported on rootless and roothide jailbroken iOS and iPadOS from version 15.0 up to 18.3.1. It's also partially supported on [Trollstore](https://github.com/opa334/TrollStore) iDevices from version 15.0 up to 17.6.1. A version of FridaCodeManager supporting usual iDevices is in progress.
 
 ## Tested Devices
 </br>
@@ -51,6 +51,7 @@ The app is fully supported on rootless and roothide jailbroken iOS and iPadOS fr
 - RootHideDev: [https://github.com/roothider](https://github.com/roothider)
 - Manuel Chakravarty: [https://github.com/mchakravarty](https://github.com/mchakravarty)
 - Ayame Yumemi: [https://github.com/ayayame09](https://github.com/ayayame09)
+- Jonah Butler (Sora): [https://github.com/jonahnm](https://github.com/jonahnm)
 #### Side Kicks
 - Opa334: [https://github.com/opa334](https://github.com/opa334)
 - TheOS: [https://github.com/theos](https://github.com/theos)

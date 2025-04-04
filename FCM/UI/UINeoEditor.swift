@@ -177,7 +177,6 @@ struct NeoEditor: UIViewRepresentable {
     @AppStorage("CEFontSize") var font: Double = 13.0
     @AppStorage("CEToolbar") var enableToolbar: Bool = true
     @AppStorage("CECurrentLineHighlighting") var current_line_highlighting: Bool = false
-    @AppStorage("CEHighlightCache") var cachehighlightings: Bool = false
     @AppStorage("CETypechecking") var dotypecheck: Bool = false
 
     init(
@@ -252,7 +251,7 @@ struct NeoEditor: UIViewRepresentable {
         textView.layoutManager.addTextContainer(textView.textContainer)
         textView.layoutManager.ensureLayout(for: textView.textContainer)
 
-        var claimed: [Int] = []
+        /*var claimed: [Int] = []
 
         if dotypecheck {
             textView.setLayoutCompletionHandler {
@@ -280,7 +279,7 @@ struct NeoEditor: UIViewRepresentable {
                     }
                 }
             }
-        }
+        }*/
 
         if enableToolbar {
             setupToolbar(textView: textView)
@@ -457,18 +456,35 @@ struct NeoEditor: UIViewRepresentable {
         private var isInvalidated = false
         private var debounceWorkItem: DispatchWorkItem?
         private let debounceDelay: TimeInterval = 2.0
-        private var highlightCache: [NSRange: [NSAttributedString.Key: Any]] = [:]
-        private var shouldCheck: Bool
+        //private var shouldCheck: Bool
+        private var shouldAutocomplete: Bool
+        let mode: Int = UserDefaults.standard.integer(forKey: "tabmode")
+        let tabchar: String = {
+            let mode: Int = UserDefaults.standard.integer(forKey: "tabmode")
+            if mode != 1 {
+                return "\t"
+            } else {
+                let spacing: Int = UserDefaults.standard.integer(forKey: "tabspacing")
+                return String(repeating: " ", count: spacing)
+            }
+        }()
 
         init(_ markdownEditorView: NeoEditor) {
             self.parent = markdownEditorView
-            self.shouldCheck = false
+            //self.shouldCheck = false
+            self.shouldAutocomplete = false
+            let suffix: String = gsuffix(from: self.parent.filepath)
 
-            let dotypecheck = UserDefaults.standard.bool(forKey: "CETypechecking") ?? false
+            /*let dotypecheck = UserDefaults.standard.bool(forKey: "CETypechecking")
             if dotypecheck {
-                let suffix: String = gsuffix(from: self.parent.filepath)
                 if suffix == "c" || suffix == "cpp" || suffix == "m" || suffix == "mm" || suffix == "swift" {
                     self.shouldCheck = true
+                }
+            }*/
+            let doautocomplete = UserDefaults.standard.bool(forKey: "CEAutocomplete")
+            if doautocomplete {
+                if suffix == "c" || suffix == "cpp" || suffix == "m" || suffix == "mm" || suffix == "swift" {
+                    self.shouldAutocomplete = true
                 }
             }
         }
@@ -487,7 +503,7 @@ struct NeoEditor: UIViewRepresentable {
                 self.applyHighlighting(to: textView, with: textView.cachedLineRange ?? NSRange(location: 0, length: 0))
             }
 
-            if !shouldCheck {
+            /*if !shouldCheck {
                 return
             }
 
@@ -504,9 +520,6 @@ struct NeoEditor: UIViewRepresentable {
 
             debounceWorkItem?.cancel()
             debounceWorkItem = DispatchWorkItem { [self] in
-
-                let text: String = textView.text
-
                 DispatchQueue.global(qos: .userInitiated).async {
                     let project = self.parent.project
                     mainlogSystem.clearLog()
@@ -562,7 +575,7 @@ struct NeoEditor: UIViewRepresentable {
                 }
             }
 
-            DispatchQueue.main.asyncAfter(deadline: .now() + debounceDelay, execute: debounceWorkItem!)
+            DispatchQueue.main.asyncAfter(deadline: .now() + debounceDelay, execute: debounceWorkItem!)*/
         }
 
         func applyHighlighting(to textView: UITextView, with visibleRange: NSRange) {
@@ -574,12 +587,6 @@ struct NeoEditor: UIViewRepresentable {
                     let matches = rule.pattern.matches(in: text, options: [], range: visibleRange)
                     matches.forEach { match in
                         let matchRange = match.range
-                        if let cachedAttributes = self.highlightCache[matchRange] {
-                            for (key, value) in cachedAttributes {
-                                attributesToApply.append((matchRange, key, value))
-                            }
-                            return
-                        }
                         let isOverlapping = attributesToApply.contains { (range, _, _) in
                             NSIntersectionRange(range, matchRange).length > 0
                         }
@@ -590,9 +597,6 @@ struct NeoEditor: UIViewRepresentable {
                             if let matchRangeStr = Range(match.range, in: text) {
                                 let matchContent = String(text[matchRangeStr])
                                 let value = calculateValue(matchContent, matchRangeStr)
-                                if self.parent.cachehighlightings {
-                                    self.highlightCache[matchRange] = [key: value]
-                                }
                                 attributesToApply.append((match.range, key, value))
                             }
                         }
@@ -620,17 +624,69 @@ struct NeoEditor: UIViewRepresentable {
         }
 
         func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
-            guard let textView = textView as? CustomTextView else { return true}
-            let mode: Int = UserDefaults.standard.integer(forKey: "tabmode")
-            if (mode != 1) { // If the current mode is tab, accept any modification
-                return true;
+            if shouldAutocomplete {
+                guard let textView = textView as? CustomTextView else { return true }
+
+                // AUTOCOMPLETION
+                if textView.didPasted {
+                    return true
+                }
+
+                // spacing options
+                if text == "" && range.length == 1 {
+                    if let cur_line_text = currentLine(in: textView), cur_line_text.hasSuffix(tabchar) {
+                        if mode == 1 {
+                            backspaceMultipleCharacters(in: textView, numberOfCharacters: UserDefaults.standard.integer(forKey: "tabspacing"))
+                        } else {
+                            textView.deleteBackward()
+                        }
+                        return false
+                    }
+                }
+
+                // auto curly braces implementation
+                if text.contains("{") {
+                    guard let cur_line_text = currentLine(in: textView) else { return false }
+                    let count = countConsecutiveOccurrences(of: tabchar, in: cur_line_text)
+                    parent.insertTextAtCurrentPosition(textView: textView, newText: "{")
+                    let currentLineRange = textView.cachedLineRange ?? NSRange(location: 0, length: 0)
+                    parent.insertTextAtCurrentPosition(textView: textView, newText: "\n\(String(repeating: tabchar, count: count + 1))\n\(String(repeating: tabchar, count: count))}")
+                    moveCursorOneLineUp(in: textView)
+                    self.applyHighlighting(to: textView, with: currentLineRange)
+                    return false
+                }
+
+                // auto braces implementation
+                if text.contains("(") {
+                    parent.insertTextAtCurrentPosition(textView: textView, newText: "()")
+                    textView.selectedRange = NSMakeRange(textView.selectedRange.location - 1, 0)
+                    return false
+                }
+
+                // auto string implementation
+                if text.contains("\"") {
+                    parent.insertTextAtCurrentPosition(textView: textView, newText: "\"\"")
+                    textView.selectedRange = NSMakeRange(textView.selectedRange.location - 1, 0)
+                    return false
+                }
+
+                // auto tabbing implementation
+                if text.contains("\n") {
+                    guard let cur_line_text = currentLine(in: textView) else { return false }
+                    let count = countConsecutiveOccurrences(of: tabchar, in: cur_line_text)
+                    parent.insertTextAtCurrentPosition(textView: textView, newText: "\n\(String(repeating: tabchar, count: count))")
+                    return false
+                }
+
+                // hardware keyboard implementation
+                if mode == 1, text.contains("\t") {
+                    let spacing: Int = UserDefaults.standard.integer(forKey: "tabspacing")
+                    parent.insertTextAtCurrentPosition(textView: textView, newText: String(repeating: " ", count: spacing))
+                    return false
+                }
             }
-            if (!text.contains("\t")) { // If the replacement doesn't contain tabs, accept it
-                return true;
-            }
-            let spacing: Int = UserDefaults.standard.integer(forKey: "tabspacing")
-            parent.insertTextAtCurrentPosition(textView: textView, newText: String(repeating: " ", count: spacing))
-            return false
+
+            return true
         }
     }
 }
@@ -887,6 +943,17 @@ class CustomTextView: UITextView {
     }
 }
 
+func moveCursorOneLineUp(in textView: UITextView) {
+    guard let text = textView.text, !text.isEmpty else { return }
+    let currentLocation = textView.selectedRange.location
+    let nsText = text as NSString
+    let currentLineRange = nsText.lineRange(for: NSRange(location: currentLocation, length: 0))
+    if currentLineRange.location > 0 {
+        let previousLineRange = nsText.lineRange(for: NSRange(location: currentLineRange.location - 1, length: 0))
+        textView.selectedRange = NSRange(location: NSMaxRange(previousLineRange) - 1, length: 0)
+    }
+}
+
 class PaddedLabel: UILabel {
     var textInsets = UIEdgeInsets(top: 8, left: 16, bottom: 8, right: 16)
 
@@ -898,6 +965,18 @@ class PaddedLabel: UILabel {
         let size = super.intrinsicContentSize
         return CGSize(width: size.width + textInsets.left + textInsets.right,
                       height: size.height + textInsets.top + textInsets.bottom)
+    }
+}
+
+func backspaceMultipleCharacters(in textView: UITextView, numberOfCharacters: Int) {
+    guard let selectedRange = textView.selectedTextRange, numberOfCharacters > 0 else { return }
+    let cursorPosition = textView.offset(from: textView.beginningOfDocument, to: selectedRange.start)
+    let startPosition = max(cursorPosition - numberOfCharacters, 0)
+    if let startPositionIndex = textView.position(from: textView.beginningOfDocument, offset: startPosition) {
+        let rangeToDelete = textView.textRange(from: startPositionIndex, to: selectedRange.start)
+        if let rangeToDelete = rangeToDelete {
+            textView.replace(rangeToDelete, withText: "")
+        }
     }
 }
 
@@ -1012,11 +1091,11 @@ func grule(_ isaythis: String) -> [HighlightRule] {
                 HighlightRule(pattern: try! NSRegularExpression(pattern: "(?<!\\/\\/)(\"(.*?)\")", options: []), formattingRules: [ TextFormattingRule(key: .foregroundColor, value: color6)
                 ]), HighlightRule(pattern: try! NSRegularExpression(pattern: "(//.*|\\/\\*[\\s\\S]*?\\*\\/)", options: []), formattingRules: [ TextFormattingRule(key: .foregroundColor, value: color5)
                 ]), HighlightRule(pattern: try! NSRegularExpression(pattern: "\\b(let|var|if|else|func|return|class|struct|self|public|private|extension|true|false|init|try|do|catch|guard|import|override|nil|switch|case|default|some|throw|for|in)\\b", options: []), formattingRules: [ TextFormattingRule(key: .foregroundColor, value: color1)
-                ]), HighlightRule(pattern: try! NSRegularExpression(pattern: #"(?<=: |-> |some )[A-Za-z0-9]+"#, options: []), formattingRules: [ TextFormattingRule(key: .foregroundColor, value: color7)
-                ]), HighlightRule(pattern: try! NSRegularExpression(pattern: "(?<=\\b(struct|class|extension)\\s)\\w+", options: []), formattingRules: [ TextFormattingRule(key: .foregroundColor, value: color2)
                 ]), HighlightRule(pattern: try! NSRegularExpression(pattern: "\\b(-?\\d+(\\.\\d+)?)\\b", options: []), formattingRules: [ TextFormattingRule(key: .foregroundColor, value: color4)
+                ]), HighlightRule(pattern: try! NSRegularExpression(pattern: #"(?<=: |-> |some )[A-Za-z1-9]+"#, options: []), formattingRules: [ TextFormattingRule(key: .foregroundColor, value: color7)
+                ]), HighlightRule(pattern: try! NSRegularExpression(pattern: "(?<=\\b(struct|class|extension)\\s)\\w+", options: []), formattingRules: [ TextFormattingRule(key: .foregroundColor, value: color2)
                 ]), HighlightRule(pattern: try! NSRegularExpression(pattern: "(?<=\\b(func|let|var)\\s)\\w+", options: []), formattingRules: [ TextFormattingRule(key: .foregroundColor, value: color8)
-                ]), HighlightRule(pattern: try! NSRegularExpression(pattern: "\\b\\w+(?=(\\())", options: []), formattingRules: [ TextFormattingRule(key: .foregroundColor, value: color7)
+                ]), HighlightRule(pattern: try! NSRegularExpression(pattern: #"\b\w+(?=\s*[\{\(])"#, options: []), formattingRules: [ TextFormattingRule(key: .foregroundColor, value: color7)
                 ]), HighlightRule(pattern: try! NSRegularExpression(pattern: "@\\w+[^()]", options: []), formattingRules: [ TextFormattingRule(key: .foregroundColor, value: color7)])
             ]
         case "c", "h", "m",  "mm", "cpp":
@@ -1234,6 +1313,7 @@ struct NeoEditorSettings: View {
     @AppStorage("CERender") var render: Double = 1.0
     @AppStorage("CEFontSize") var font: Double = 13.0
     @AppStorage("CEToolbar") var toolbar: Bool = true
+    @AppStorage("CEAutocomplete") var autocomplete: Bool = true
     @AppStorage("CECurrentLineHighlighting") var current_line_highlighting: Bool = false
     var body: some View {
         List {
@@ -1261,6 +1341,7 @@ struct NeoEditorSettings: View {
                 Toggle("Line Highlighting", isOn: $current_line_highlighting)
                     .disabled(isPad)
                 Toggle("Toolbar", isOn: $toolbar)
+                Toggle("Autocomplete", isOn: $autocomplete)
             }
         }
         .navigationTitle("Code Editor")
