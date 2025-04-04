@@ -28,7 +28,7 @@ FridaCodeManager_SWIFT_BRIDGING_HEADER = FCM/bridge.h
 FridaCodeManager_FRAMEWORKS = UIKit CoreGraphics CoreFoundation
 FridaCodeManager_PRIVATE_FRAMEWORKS = MobileContainerManager
 
-FridaCodeManager_LDFLAGS = -L$(THEOS_OBJ_DIR) -LEssentials/prebuild 
+FridaCodeManager_LDFLAGS = -L$(THEOS_OBJ_DIR) -LEssentials/lib/prebuild 
 FridaCodeManager_LIBRARIES = sean fcm zip root swiftCore
 
 FridaCodeManager_SWIFTFLAGS = -Xcc -IEssentials/include -parse-as-library -Djailbreak
