@@ -105,8 +105,8 @@ get_sdk:
 	@if [ ! -d SDK ]; then \
 		mkdir -p tmp; \
 		cd tmp; \
-		unzip ../FCM/UI/TabBar/Settings/SDKHub/sdk/iOS15.6.zip; \
-		mv iPhoneOS15.6.sdk ../SDK; \
+		unzip ../FCM/UI/TabBar/Settings/SDKHub/sdk/iOS16.5.zip; \
+		mv iPhoneOS16.5.sdk ../SDK; \
 		cd ../SDK; \
 		mv System/Library/PrivateFrameworks/MobileContainerManager.framework System/Library/Frameworks/MobileContainerManager.framework; \
 		rm -rf tmp; \
