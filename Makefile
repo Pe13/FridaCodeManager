@@ -43,7 +43,7 @@ before-stage::
 	fi
 
 before-package::
-	@echo "Package: com.sparklechan.fridacodemanager" > control
+	@echo "Package: com.sparklechan.swifty" > control
 	@echo "Name: FridaCodeManager" >> control
 	@echo "Version: $(VERSION)" >> control
 	@echo "Description: Full fledged Xcode-like IDE for iOS" >> control
